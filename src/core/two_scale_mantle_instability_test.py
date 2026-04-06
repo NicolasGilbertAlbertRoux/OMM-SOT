@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 from scipy.optimize import curve_fit
 from scipy.ndimage import gaussian_filter, label
 
-OUT = Path("results/research_1_6/two_scale_mantle_instability_test")
+OUT = Path("results/core/two_scale_mantle_instability_test")
 OUT.mkdir(parents=True, exist_ok=True)
 
 # ============================================================
