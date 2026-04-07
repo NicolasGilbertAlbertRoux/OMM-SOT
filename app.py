@@ -9,32 +9,100 @@ import streamlit as st
 
 PYTHON = sys.executable
 
-DOMAIN_COMMANDS = {
-    "Proto-atom (stable structure)": [PYTHON, "src/proto_atoms/proto_atom_final_render_best.py"],
-    "Proto-periodic classification": [PYTHON, "src/proto_atoms/proto_atom_periodic_map.py"],
-    "Dipole / binding regime": [PYTHON, "src/proto_atoms/proto_atom_dipole_interaction.py"],
-    "Magnetic alignment": [PYTHON, "src/magnetism/proto_atom_magnetic_alignment_test.py"],
-    "Orbital regime": [PYTHON, "src/orbital/proto_atom_orbital_test.py"],
-    "Two-scale geometry": [PYTHON, "src/geometry/geodesic_two_scale_geometry.py"],
-    "Cosmology": [PYTHON, "src/cosmology/cosmic_mantle_expansion_scan.py"],
+DOMAINS = {
+    "Proto-atom (interactive)": {
+        "script": "src/app_variants/proto_atom_render_app.py",
+        "description": "Interactive proto-atomic render using the real research code adapted for parameterized launch.",
+        "params": {
+            "size": {"type": "int", "min": 64, "max": 256, "default": 128, "step": 32},
+            "n_steps": {"type": "int", "min": 50, "max": 300, "default": 180, "step": 10},
+            "seed": {"type": "int", "min": 1, "max": 20, "default": 3, "step": 1},
+            "beta": {"type": "float", "min": 5.0, "max": 12.0, "default": 8.75},
+            "center_gain": {"type": "float", "min": 0.0, "max": 0.05, "default": 0.012},
+            "node_gain": {"type": "float", "min": 0.0, "max": 0.2, "default": 0.100},
+            "matter_gain": {"type": "float", "min": 0.0, "max": 0.2, "default": 0.098},
+            "omega_bg": {"type": "float", "min": 0.0, "max": 1.0, "default": 0.22},
+            "background_gain": {"type": "float", "min": 0.0, "max": 0.1, "default": 0.035},
+            "omega_local": {"type": "float", "min": 0.0, "max": 1.0, "default": 0.47},
+            "local_beat_gain": {"type": "float", "min": 0.0, "max": 0.2, "default": 0.085},
+            "flux_gain": {"type": "float", "min": 0.0, "max": 0.1, "default": 0.045},
+            "edge_penalty": {"type": "float", "min": 0.0, "max": 0.3, "default": 0.10},
+        },
+        "figures": [
+            "figures/app_proto_atom_render.png",
+            "figures/app_proto_atom_render_diagnostics.png",
+        ],
+    },
 }
 
-DOMAIN_HINTS = {
-    "Proto-atom (stable structure)": [
-        "figures/proto_atom_final_best.png",
-        "figures/proto_atom_final_best_diagnostics.png",
-    ],
-    "Proto-periodic classification": [
-        "figures/proto_periodic_table.png",
-        "figures/proto_families_scatter.png",
-        "figures/proto_family_counts.png",
-    ],
-    "Dipole / binding regime": [
-        "figures/dipole_interaction_gallery.png",
-        "figures/effective_dipole_orientation.png",
-    ],
-    "Magnetic alignment": [
-        "figures/aligned_domain_curl_snapshots.png",
+st.set_page_config(page_title="OMM-SOT Explorer", layout="wide")
+
+st.title("OMM-SOT Interactive Explorer")
+st.markdown(
+    "This interface launches interactive variants of selected research scripts, "
+    "so that users can modify parameters and regenerate actual outputs."
+)
+
+domain = st.selectbox("Scientific domain", list(DOMAINS.keys()))
+entry = DOMAINS[domain]
+
+st.subheader(domain)
+st.write(entry["description"])
+
+st.markdown("**Executed script**")
+st.code(f"{PYTHON} {entry['script']} ...")
+
+st.markdown("**Parameters**")
+values = {}
+for key, spec in entry["params"].items():
+    step = spec.get("step", None)
+    if spec["type"] == "int":
+        values[key] = st.slider(
+            key,
+            int(spec["min"]),
+            int(spec["max"]),
+            int(spec["default"]),
+            step=int(step) if step is not None else 1,
+        )
+    else:
+        values[key] = st.slider(
+            key,
+            float(spec["min"]),
+            float(spec["max"]),
+            float(spec["default"]),
+        )
+
+if st.button("Run simulation", width="stretch"):
+    cmd = [PYTHON, entry["script"]]
+    for key, value in values.items():
+        cmd.extend([f"--{key}", str(value)])
+
+    st.info("Running interactive research variant...")
+    try:
+        subprocess.run(cmd, check=True)
+        st.success("Simulation completed.")
+    except subprocess.CalledProcessError as exc:
+        st.error(f"Simulation failed with return code {exc.returncode}.")
+
+st.subheader("Expected output figures")
+for fig in entry["figures"]:
+    st.code(fig)
+
+st.subheader("Preview")
+existing = [Path(fig) for fig in entry["figures"] if Path(fig).exists()]
+if not existing:
+    st.warning("No preview figure currently found.")
+else:
+    cols = st.columns(2)
+    for i, path in enumerate(existing):
+        with cols[i % 2]:
+            st.image(str(path), caption=path.name, width="stretch")
+
+st.markdown("---")
+st.caption(
+    "These interactive variants should remain faithful to the original research scripts. "
+    "They are intended for controlled parameter exploration, not for replacing the reference paper pipeline."
+)        "figures/aligned_domain_curl_snapshots.png",
     ],
     "Orbital regime": [
         "figures/full_dynamics_v2_trajectories.png",
