@@ -103,18 +103,18 @@ GROUPS = {
         "proto-three-body",
         "proto-valence",
     ],
-    "all": ["chain", "regime-map", "lifecycle", "mantle", "cosmo"],
-    "full": [
-        "chain", "regime-map", "lifecycle", "mantle", "cosmo",
-        "laws-short-range", "laws-loop-bg", "laws-loop-interaction", "laws-loop-stability", "laws-flux",
-        "geometry-effective", "geometry-energy", "geometry-dynamic", "geometry-two-scale", "geometry-lensing",
-        "magnetic-alignment", "magnetic-domain-emergence", "magnetic-domain-interaction", "magnetic-pair-orientation", "magnetic-sector",
-        "orbital-test", "orbital-rotation", "orbital-true-rotation",
-        "proto-classifier", "proto-dipole", "proto-effective-dipole", "proto-family-validation",
-        "proto-final-render", "proto-full-dynamics", "proto-full-dynamics-v2",
-        "proto-molecular", "proto-molecule-builder", "proto-pair",
-        "proto-periodic", "proto-three-body", "proto-valence",
+    "showcase": [
+        "chain",
+        "regime-map",
+        "proto-final-render",
+        "proto-periodic",
+        "proto-dipole",
+        "magnetic-alignment",
+        "orbital-test",
+        "geometry-two-scale",
+        "cosmo",
     ],
+    "all": ["chain", "regime-map", "lifecycle", "mantle", "cosmo"],
 }
 
 def run_command(name: str) -> None:
@@ -124,23 +124,17 @@ def run_command(name: str) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="OMM-SOT reproducibility launcher")
-    parser.add_argument(
-        "--target",
-        required=True,
-        help="Single target or group to run"
-    )
+    parser.add_argument("--target", required=True, help="Single target or group to run")
     args = parser.parse_args()
 
-    target = args.target
-
-    if target in COMMANDS:
-        run_command(target)
-    elif target in GROUPS:
-        for name in GROUPS[target]:
+    if args.target in COMMANDS:
+        run_command(args.target)
+    elif args.target in GROUPS:
+        for name in GROUPS[args.target]:
             run_command(name)
     else:
         valid = sorted(list(COMMANDS.keys()) + list(GROUPS.keys()))
-        print(f"[ERROR] Unknown target: {target}")
+        print(f"[ERROR] Unknown target: {args.target}")
         print("Available targets:")
         for v in valid:
             print(f" - {v}")
