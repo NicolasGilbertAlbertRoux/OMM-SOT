@@ -61,7 +61,7 @@ Selected .npy files are provided in results/final_states/ as reference end state
 
 ## Notes
 
-The framework explores the emergence of wave-like, structured, flux-like, geometric and cosmological regimes from a unified discrete energetic substrate.
+The framework explores the emergence of wave-like, structured, flux-like, geometric, proto-atomic, magnetic, orbital and cosmological regimes from a unified discrete energetic substrate.
 
 This repository is organized to make both direct reproduction and further extension possible.
 
