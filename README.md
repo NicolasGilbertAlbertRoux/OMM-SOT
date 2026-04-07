@@ -62,7 +62,18 @@ A lightweight local interface is also provided:
 streamlit run app.py
 ```
 
-This opens a small interactive application from which users can launch representative simulations by scientific domain.
+This interface launches actual simulation scripts from the repository and previews the real figures they generate.
+
+Current domains include:
+	- proto-atomic stable render
+	- proto-periodic classification
+	- dipole / binding regime
+	- magnetic alignment
+	- orbital regime
+	- two-scale geometry
+	- cosmology
+
+The current version is intentionally conservative: it prioritizes honest execution of the real research code over decorative interactivity.
 
 ---
 
@@ -106,25 +117,6 @@ In particular, the framework provides sufficient structure to enable external qu
 The framework explores the emergence of wave-like, structured, flux-like, geometric, proto-atomic, magnetic, orbital and cosmological regimes from a unified discrete energetic substrate.
 
 This repository is organized to support both direct reproducibility and further extension.
-
----
-
-## License
-
-MIT License
-
----
-
-## Citation
-
-If you use this code or build upon this framework, please cite the associated manuscript.
----
-
-## Notes
-
-The framework explores the emergence of wave-like, structured, flux-like, geometric, proto-atomic, magnetic, orbital and cosmological regimes from a unified discrete energetic substrate.
-
-This repository is organized to make both direct reproduction and further extension possible.
 
 ---
 
