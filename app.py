@@ -211,22 +211,76 @@ DOMAINS = {
     },
     "Orbital launcher": {
         "script": "src/app_variants/orbital_geodesic_launcher_app.py",
-        "description": "Trajectory propagation inside emergent geometry.",
+        "description": (
+            "Interactive 2D orbital launcher combining a central macroscopic body, "
+            "a smooth emergent OMM geometry, and an optional magnetic anisotropy."
+        ),
         "params": {
-            "x0": {"type": "float", "min": 0.0, "max": 200.0, "default": 140.0},
-            "y0": {"type": "float", "min": 0.0, "max": 200.0, "default": 100.0},
-            "vx0": {"type": "float", "min": -2.0, "max": 2.0, "default": 0.0},
-            "vy0": {"type": "float", "min": -2.0, "max": 2.0, "default": 0.6},
-            "source_sigma": {"type": "float", "min": 2.0, "max": 20.0, "default": 6.0},
-            "epsilon_global": {"type": "float", "min": 0.0, "max": 0.1, "default": 0.02},
-            "global_sigma": {"type": "float", "min": 2.0, "max": 20.0, "default": 8.0},
-            "global_eta": {"type": "float", "min": 0.001, "max": 0.1, "default": 0.02},
-            "global_mass": {"type": "float", "min": 0.0, "max": 0.2, "default": 0.1},
-            "n_steps": {"type": "int", "min": 100, "max": 1000, "default": 400},
+            "size": {"type": "int", "min": 160, "max": 384, "default": 256, "step": 16},
+            "n_steps": {"type": "int", "min": 100, "max": 1200, "default": 500, "step": 50},
+            "dt": {"type": "float", "min": 0.01, "max": 0.20, "default": 0.05, "step": 0.01},
+
+            "central_mass": {"type": "float", "min": 100.0, "max": 20000.0, "default": 5000.0, "step": 100.0},
+            "softening": {"type": "float", "min": 1.0, "max": 20.0, "default": 5.0, "step": 0.5},
+
+            "init_radius": {"type": "float", "min": 10.0, "max": 150.0, "default": 80.0, "step": 1.0},
+            "init_speed": {"type": "float", "min": 0.1, "max": 8.0, "default": 2.5, "step": 0.1},
+            "init_angle_deg": {"type": "float", "min": 0.0, "max": 180.0, "default": 90.0, "step": 1.0},
+
+            "field_strength": {"type": "float", "min": 0.0, "max": 5.0, "default": 0.5, "step": 0.1},
+            "field_sigma": {"type": "float", "min": 5.0, "max": 100.0, "default": 30.0, "step": 1.0},
+
+            "magnetic_strength": {"type": "float", "min": 0.0, "max": 5.0, "default": 0.0, "step": 0.1},
+            "magnetic_angle_deg": {"type": "float", "min": 0.0, "max": 180.0, "default": 0.0, "step": 1.0},
         },
         "figures": [
-            "figures/app_orbital_launcher.png"
+            "figures/app_orbital_launcher.png",
+            "figures/app_orbital_launcher_diagnostics.png",
         ],
+        "presets": {
+            "Reference orbit A": {
+                "size": 256,
+                "n_steps": 500,
+                "dt": 0.05,
+                "central_mass": 5000.0,
+                "softening": 5.0,
+                "init_radius": 80.0,
+                "init_speed": 2.5,
+                "init_angle_deg": 90.0,
+                "field_strength": 0.5,
+                "field_sigma": 30.0,
+                "magnetic_strength": 0.0,
+                "magnetic_angle_deg": 0.0,
+            },
+            "Capture test": {
+                "size": 256,
+                "n_steps": 500,
+                "dt": 0.05,
+                "central_mass": 7000.0,
+                "softening": 4.0,
+                "init_radius": 60.0,
+                "init_speed": 1.2,
+                "init_angle_deg": 90.0,
+                "field_strength": 0.6,
+                "field_sigma": 28.0,
+                "magnetic_strength": 0.0,
+                "magnetic_angle_deg": 0.0,
+            },
+            "Magnetized test": {
+                "size": 256,
+                "n_steps": 500,
+                "dt": 0.05,
+                "central_mass": 5000.0,
+                "softening": 5.0,
+                "init_radius": 80.0,
+                "init_speed": 2.5,
+                "init_angle_deg": 90.0,
+                "field_strength": 0.5,
+                "field_sigma": 30.0,
+                "magnetic_strength": 1.0,
+                "magnetic_angle_deg": 35.0,
+            },
+        },
     },
     "Cosmic mantle expansion": {
         "script": "src/app_variants/cosmic_mantle_expansion_app.py",
@@ -440,6 +494,13 @@ if st.button("Run simulation", width="stretch"):
                 "random_final_curl": extract_float(stdout, "random_final_curl"),
                 "random_final_loop": extract_float(stdout, "random_final_loop"),
             }
+        elif domain == "Orbital launcher":
+            metrics = {
+                "final_radius": extract_float(stdout, "final_radius"),
+                "mean_radius": extract_float(stdout, "mean_radius"),
+                "max_speed": extract_float(stdout, "max_speed"),
+                "mean_speed": extract_float(stdout, "mean_speed"),
+            }
         elif domain == "Cosmic mantle expansion":
             metrics = {
                 "a_total_final": extract_float(stdout, "a_total_final"),
@@ -634,6 +695,45 @@ else:
                 f"{report['metrics'].get('random_final_loop'):.4e}"
                 if report["metrics"].get("random_final_loop") is not None else "—",
             )
+
+    elif domain == "Orbital launcher":
+        col1, col2 = st.columns(2)
+        with col1:
+            st.metric(
+                "Final radius",
+                f"{report['metrics'].get('final_radius'):.4f}"
+                if report["metrics"].get("final_radius") is not None else "—",
+            )
+            st.metric(
+                "Mean radius",
+                f"{report['metrics'].get('mean_radius'):.4f}"
+                if report["metrics"].get("mean_radius") is not None else "—",
+            )
+        with col2:
+            st.metric(
+                "Max speed",
+                f"{report['metrics'].get('max_speed'):.4f}"
+                if report["metrics"].get("max_speed") is not None else "—",
+            )
+            st.metric(
+                "Mean speed",
+                f"{report['metrics'].get('mean_speed'):.4f}"
+                if report["metrics"].get("mean_speed") is not None else "—",
+            )
+
+        st.markdown("### Interpretation")
+        fr = report["metrics"].get("final_radius")
+        ms = report["metrics"].get("mean_speed")
+
+        if fr is None or ms is None:
+            st.write("No interpretation available.")
+        else:
+            if fr < 15:
+                st.success("Capture / crash-like regime")
+            elif fr < 80:
+                st.info("Bound / orbital-like regime")
+            else:
+                st.warning("Flyby / escape-like regime")
 
     elif domain == "Cosmic mantle expansion":
         col1, col2 = st.columns(2)
