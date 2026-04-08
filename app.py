@@ -209,6 +209,25 @@ DOMAINS = {
             },
         },
     },
+    "Orbital launcher": {
+        "script": "src/app_variants/orbital_geodesic_launcher_app.py",
+        "description": "Trajectory propagation inside emergent geometry.",
+        "params": {
+            "x0": {"type": "float", "min": 0.0, "max": 200.0, "default": 140.0},
+            "y0": {"type": "float", "min": 0.0, "max": 200.0, "default": 100.0},
+            "vx0": {"type": "float", "min": -2.0, "max": 2.0, "default": 0.0},
+            "vy0": {"type": "float", "min": -2.0, "max": 2.0, "default": 0.6},
+            "source_sigma": {"type": "float", "min": 2.0, "max": 20.0, "default": 6.0},
+            "epsilon_global": {"type": "float", "min": 0.0, "max": 0.1, "default": 0.02},
+            "global_sigma": {"type": "float", "min": 2.0, "max": 20.0, "default": 8.0},
+            "global_eta": {"type": "float", "min": 0.001, "max": 0.1, "default": 0.02},
+            "global_mass": {"type": "float", "min": 0.0, "max": 0.2, "default": 0.1},
+            "n_steps": {"type": "int", "min": 100, "max": 1000, "default": 400},
+        },
+        "figures": [
+            "figures/app_orbital_launcher.png"
+        ],
+    },
     "Cosmic mantle expansion": {
         "script": "src/app_variants/cosmic_mantle_expansion_app.py",
         "description": (
