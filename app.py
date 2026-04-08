@@ -66,6 +66,44 @@ DOMAINS = {
             },
         },
     },
+    "Proto-atom dipole": {
+        "script": "src/app_variants/proto_atom_dipole_interaction_app.py",
+        "description": "Interactive dipole interaction using the real dipole interaction research code adapted for parameterized launch.",
+        "params": {
+            "size": {"type": "int", "min": 128, "max": 320, "default": 256, "step": 32},
+            "n_steps": {"type": "int", "min": 120, "max": 480, "default": 360, "step": 20},
+            "distance": {"type": "float", "min": 20.0, "max": 120.0, "default": 60.0, "step": 2.0},
+            "angle_deg": {"type": "float", "min": 0.0, "max": 180.0, "default": 0.0, "step": 5.0},
+            "flip_b": {"type": "bool", "default": False},
+        },
+        "figures": [
+            "figures/app_proto_dipole.png",
+            "figures/app_proto_dipole_snapshots.png",
+        ],
+        "presets": {
+            "Parallel close": {
+                "size": 256,
+                "n_steps": 360,
+                "distance": 40.0,
+                "angle_deg": 32.0,
+                "flip_b": False,
+            },
+            "Antiparallel close": {
+                "size": 256,
+                "n_steps": 360,
+                "distance": 40.0,
+                "angle_deg": 32.0,
+                "flip_b": True,
+            },
+            "Parallel far": {
+                "size": 256,
+                "n_steps": 360,
+                "distance": 70.0,
+                "angle_deg": 32.0,
+                "flip_b": False,
+            },
+        },
+    },
 }
 
 
@@ -77,19 +115,12 @@ def extract_float(text: str, name: str):
 def init_session_state() -> None:
     if "report" not in st.session_state:
         st.session_state.report = {
-            "stability": "not yet run",
-            "score": None,
-            "final_std": None,
-            "offset": None,
-            "anis": None,
-            "core": None,
-            "split": None,
             "stdout": "",
             "stderr": "",
+            "metrics": {},
+            "domain": None,
+            "error": None,
         }
-
-    if "selected_preset" not in st.session_state:
-        st.session_state.selected_preset = None
 
 
 st.set_page_config(page_title="OMM-SOT Explorer", layout="wide")
@@ -110,29 +141,25 @@ st.write(entry["description"])
 st.markdown("**Executed script**")
 st.code(f"{PYTHON} {entry['script']} ...")
 
-# Presets
 preset_names = ["Custom"] + list(entry.get("presets", {}).keys())
 selected_preset = st.selectbox("Preset", preset_names)
-
-if selected_preset != "Custom":
-    preset_values = entry["presets"][selected_preset]
-else:
-    preset_values = {}
+preset_values = entry["presets"][selected_preset] if selected_preset != "Custom" else {}
 
 st.markdown("**Parameters**")
 values = {}
 
 for key, spec in entry["params"].items():
-    step = spec.get("step", None)
     default_value = preset_values.get(key, spec["default"])
 
-    if spec["type"] == "int":
+    if spec["type"] == "bool":
+        values[key] = st.checkbox(key, value=bool(default_value))
+    elif spec["type"] == "int":
         values[key] = st.slider(
             key,
             int(spec["min"]),
             int(spec["max"]),
             int(default_value),
-            step=int(step) if step is not None else 1,
+            step=int(spec.get("step", 1)),
         )
     else:
         values[key] = st.slider(
@@ -140,13 +167,16 @@ for key, spec in entry["params"].items():
             float(spec["min"]),
             float(spec["max"]),
             float(default_value),
-            step=float(step) if step is not None else None,
+            step=float(spec.get("step", 0.01)),
         )
 
 if st.button("Run simulation", width="stretch"):
     cmd = [PYTHON, entry["script"]]
     for key, value in values.items():
-        cmd.extend([f"--{key}", str(value)])
+        if isinstance(value, bool):
+            cmd.extend([f"--{key}", "1" if value else "0"])
+        else:
+            cmd.extend([f"--{key}", str(value)])
 
     st.info("Running interactive research variant...")
 
@@ -157,79 +187,103 @@ if st.button("Run simulation", width="stretch"):
 
     if result.returncode != 0:
         st.session_state.report = {
-            "stability": "error",
-            "score": None,
-            "final_std": None,
-            "offset": None,
-            "anis": None,
-            "core": None,
-            "split": None,
             "stdout": stdout,
             "stderr": stderr,
+            "metrics": {},
+            "domain": domain,
+            "error": f"Simulation failed with return code {result.returncode}.",
         }
-        st.error(f"Simulation failed with return code {result.returncode}.")
+        st.error(st.session_state.report["error"])
     else:
-        stability = re.search(r"stability_class=(\w+)", stdout)
+        metrics = {}
+        if domain == "Proto-atom (interactive)":
+            metrics = {
+                "stability_index": extract_float(stdout, "stability_index"),
+                "final_std": extract_float(stdout, "final_std"),
+                "centroid_offset": extract_float(stdout, "centroid_offset"),
+                "anisotropy": extract_float(stdout, "anisotropy"),
+                "core_mass_fraction": extract_float(stdout, "core_mass_fraction"),
+                "split_score": extract_float(stdout, "split_score"),
+            }
+        elif domain == "Proto-atom dipole":
+            metrics = {
+                "interaction_score": extract_float(stdout, "interaction_score"),
+                "final_distance": extract_float(stdout, "final_distance"),
+                "dipole_amplitude": extract_float(stdout, "dipole_amplitude"),
+                "anisotropy_ratio": extract_float(stdout, "anisotropy_ratio"),
+                "major_axis_angle_deg": extract_float(stdout, "major_axis_angle_deg"),
+                "dipole_angle_deg": extract_float(stdout, "dipole_angle_deg"),
+            }
+
         st.session_state.report = {
-            "stability": stability.group(1) if stability else "unknown",
-            "score": extract_float(stdout, "stability_index"),
-            "final_std": extract_float(stdout, "final_std"),
-            "offset": extract_float(stdout, "centroid_offset"),
-            "anis": extract_float(stdout, "anisotropy"),
-            "core": extract_float(stdout, "core_mass_fraction"),
-            "split": extract_float(stdout, "split_score"),
             "stdout": stdout,
             "stderr": stderr,
+            "metrics": metrics,
+            "domain": domain,
+            "error": None,
         }
         st.success("Simulation completed.")
 
 report = st.session_state.report
 
-st.subheader("Stability report")
+st.subheader("Report")
 
-col1, col2 = st.columns(2)
-
-with col1:
-    st.metric("Stability class", report["stability"])
-    st.metric(
-        "Stability index",
-        f"{report['score']:.3f}" if report["score"] is not None else "—",
-    )
-
-with col2:
-    st.metric(
-        "Final std",
-        f"{report['final_std']:.3f}" if report["final_std"] is not None else "—",
-    )
-    st.metric(
-        "Offset",
-        f"{report['offset']:.3f}" if report["offset"] is not None else "—",
-    )
-
-st.markdown("### Structural metrics")
-st.write({
-    "anisotropy": report["anis"],
-    "core_mass_fraction": report["core"],
-    "split_score": report["split"],
-})
-
-# Simple visual stability bar
-st.markdown("### Stability gradient")
-score = report["score"]
-if score is None:
-    st.progress(0)
-    st.caption("Run a simulation to compute stability.")
+if report["domain"] != domain or not report["metrics"]:
+    st.info("Run a simulation to generate a report.")
 else:
-    normalized = max(0.0, min(1.0, score / 3.0))
-    st.progress(normalized)
-    if report["stability"] == "stable":
-        st.caption("Stable regime")
-    elif report["stability"] == "meta-stable":
-        st.caption("Meta-stable regime")
-    elif report["stability"] == "unstable":
-        st.caption("Unstable regime")
-    else:
-        st.caption("Unknown regime")
+    if domain == "Proto-atom (interactive)":
+        col1, col2 = st.columns(2)
+        with col1:
+            score = report["metrics"].get("stability_index")
+            st.metric("Stability score", f"{score:.3f}" if score is not None else "—")
+            final_std = report["metrics"].get("final_std")
+            st.metric("Final std", f"{final_std:.3f}" if final_std is not None else "—")
+        with col2:
+            offset = report["metrics"].get("centroid_offset")
+            st.metric("Centroid offset", f"{offset:.3f}" if offset is not None else "—")
+            anis = report["metrics"].get("anisotropy")
+            st.metric("Anisotropy", f"{anis:.3f}" if anis is not None else "—")
+
+        st.markdown("### Structural metrics")
+        st.write({
+            "core_mass_fraction": report["metrics"].get("core_mass_fraction"),
+            "split_score": report["metrics"].get("split_score"),
+        })
+
+        st.markdown("### Stability gradient")
+        if score is None:
+            st.progress(0.0)
+        else:
+            normalized = max(0.0, min(1.0, 1.0 - score / 1.5))
+            st.progress(normalized)
+            st.caption("Higher bar = lower instability score")
+
+    elif domain == "Proto-atom dipole":
+        col1, col2 = st.columns(2)
+        with col1:
+            s = report["metrics"].get("interaction_score")
+            st.metric("Interaction score", f"{s:.3f}" if s is not None else "—")
+            d = report["metrics"].get("final_distance")
+            st.metric("Final distance", f"{d:.3f}" if d is not None else "—")
+        with col2:
+            dip = report["metrics"].get("dipole_amplitude")
+            st.metric("Dipole amplitude", f"{dip:.3f}" if dip is not None else "—")
+            anis = report["metrics"].get("anisotropy_ratio")
+            st.metric("Anisotropy ratio", f"{anis:.3f}" if anis is not None else "—")
+
+        st.markdown("### Angular metrics")
+        st.write({
+            "major_axis_angle_deg": report["metrics"].get("major_axis_angle_deg"),
+            "dipole_angle_deg": report["metrics"].get("dipole_angle_deg"),
+        })
+
+        st.markdown("### Interaction gradient")
+        if s is None:
+            st.progress(0.0)
+        else:
+            normalized = max(0.0, min(1.0, s))
+            st.progress(normalized)
+            st.caption("Higher bar = stronger interaction score")
 
 st.subheader("Expected output figures")
 for fig in entry["figures"]:
@@ -250,109 +304,6 @@ with st.expander("Raw simulation output"):
         st.text(report["stdout"])
     if report["stderr"]:
         st.text(report["stderr"])
-
-st.markdown("---")
-st.caption(
-    "These interactive variants should remain faithful to the original research scripts. "
-    "They are intended for controlled parameter exploration, not for replacing the reference paper pipeline."
-)
-st.set_page_config(page_title="OMM-SOT Explorer", layout="wide")
-
-st.title("OMM-SOT Interactive Explorer")
-st.markdown(
-    "This interface launches interactive variants of selected research scripts, "
-    "so that users can modify parameters and regenerate actual outputs."
-)
-
-domain = st.selectbox("Scientific domain", list(DOMAINS.keys()))
-entry = DOMAINS[domain]
-
-st.subheader(domain)
-st.write(entry["description"])
-
-st.markdown("**Executed script**")
-st.code(f"{PYTHON} {entry['script']} ...")
-
-st.markdown("**Parameters**")
-values = {}
-for key, spec in entry["params"].items():
-    step = spec.get("step", None)
-    if spec["type"] == "int":
-        values[key] = st.slider(
-            key,
-            int(spec["min"]),
-            int(spec["max"]),
-            int(spec["default"]),
-            step=int(step) if step is not None else 1,
-        )
-    else:
-        values[key] = st.slider(
-            key,
-            float(spec["min"]),
-            float(spec["max"]),
-            float(spec["default"]),
-        )
-
-if st.button("Run simulation", width="stretch"):
-    cmd = [PYTHON, entry["script"]]
-    for key, value in values.items():
-        cmd.extend([f"--{key}", str(value)])
-
-    st.info("Running interactive research variant...")
-    try:
-        result = subprocess.run(cmd, capture_output=True, text=True)
-        text = result.stdout
-        import re
-
-        def extract(name):
-            m = re.search(fr"{name}=([0-9eE\.\-]+)", text)
-            return float(m.group(1)) if m else None
-
-        final_std = extract("final_std")
-        offset = extract("centroid_offset")
-        anis = extract("anisotropy")
-        core = extract("core_mass_fraction")
-        split = extract("split_score")
-        score = extract("stability_index")
-
-        m = re.search(r"stability_class=(\w+)", text)
-        stability = m.group(1) if m else "unknown"
-        st.success("Simulation completed.")
-    except subprocess.CalledProcessError as exc:
-        st.error(f"Simulation failed with return code {exc.returncode}.")
-
-st.subheader("Stability report")
-
-col1, col2 = st.columns(2)
-
-with col1:
-    st.metric("Stability class", stability)
-    st.metric("Stability index", f"{score:.3f}")
-
-with col2:
-    st.metric("Final std", f"{final_std:.3f}")
-    st.metric("Offset", f"{offset:.3f}")
-
-st.markdown("### Structural metrics")
-st.write({
-    "anisotropy": anis,
-    "core_mass_fraction": core,
-    "split_score": split,
-})
-
-st.subheader("Expected output figures")
-for fig in entry["figures"]:
-    st.code(fig)
-
-st.subheader("Preview")
-existing = [Path(fig) for fig in entry["figures"] if Path(fig).exists()]
-if not existing:
-    st.warning("No preview figure currently found.")
-else:
-    cols = st.columns(2)
-    for i, path in enumerate(existing):
-        with cols[i % 2]:
-            st.image(str(path), caption=path.name, width="stretch")
 
 st.markdown("---")
 st.caption(
