@@ -4,13 +4,21 @@
 from __future__ import annotations
 
 import argparse
+import re
 import sys
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-import yaml
+
+ROOT = Path(__file__).resolve().parents[2]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from src.research1_core.io import load_nodes_edges
+from src.research1_core.graph import build_incidence
+from src.research1_core.operators import build_dirac_like
 
 # ------------------------------------------------------------
 # CLI
@@ -19,14 +27,7 @@ import yaml
 parser = argparse.ArgumentParser(
     description="Interactive substantial oscillation / single-pair Dirac beat explorer."
 )
-parser.add_argument(
-    "--repo_root",
-    type=str,
-    default="../unified-emergent-framework",
-    help="Path to the Research 1 repository root.",
-)
-parser.add_argument("--beta_index", type=int, default=0)
-parser.add_argument("--seed_index", type=int, default=0)
+parser.add_argument("--case_index", type=int, default=0)
 parser.add_argument("--pair_index", type=int, default=1)
 parser.add_argument("--t_max", type=float, default=200.0)
 parser.add_argument("--n_steps", type=int, default=4000)
@@ -34,59 +35,51 @@ parser.add_argument("--max_pairs", type=int, default=8)
 args = parser.parse_args()
 
 # ------------------------------------------------------------
-# Resolve Research 1 paths robustly
-# ------------------------------------------------------------
-
-REPO_ROOT = Path(args.repo_root).resolve()
-CANDIDATES = [
-    REPO_ROOT,
-    REPO_ROOT / "src",
-    REPO_ROOT / "scripts",
-]
-
-for p in CANDIDATES:
-    if p.exists() and str(p) not in sys.path:
-        sys.path.insert(0, str(p))
-
-# ------------------------------------------------------------
-# Imports from Research 1
-# ------------------------------------------------------------
-
-try:
-    from core.io import load_nodes_edges
-    from core.graph import build_incidence
-    from core.operators import build_dirac_like
-except ModuleNotFoundError as exc:
-    raise ModuleNotFoundError(
-        "Could not import Research 1 modules. "
-        f"Checked repo_root={REPO_ROOT}. "
-        "Make sure the path points to the unified-emergent-framework repository "
-        "and that the expected core/ package is available there."
-    ) from exc
-
-# ------------------------------------------------------------
 # Paths
 # ------------------------------------------------------------
 
-OUT = Path("results/app_variants/substantial_oscillation")
-OUT.mkdir(parents=True, exist_ok=True)
+DATA_DIR = ROOT / "data" / "substantial_oscillation"
+OUT = ROOT / "results" / "app_variants" / "substantial_oscillation"
+FIG_OUT = ROOT / "figures"
 
-FIG_OUT = Path("figures")
+OUT.mkdir(parents=True, exist_ok=True)
 FIG_OUT.mkdir(parents=True, exist_ok=True)
 
 # ------------------------------------------------------------
 # Helpers
 # ------------------------------------------------------------
 
-def load_config(repo_root: Path, rel_path: str = "configs/default.yaml") -> dict:
-    path = repo_root / rel_path
-    if not path.exists():
+def discover_cases(detail_dir: Path):
+    if not detail_dir.exists():
         raise FileNotFoundError(
-            f"Missing config file: {path}. "
-            "Check that --repo_root points to the root of unified-emergent-framework."
+            f"Missing directory: {detail_dir}\n"
+            "Create data/substantial_oscillation/ and place the filament_nodes / filament_edges CSV pairs there."
         )
-    with open(path, "r", encoding="utf-8") as fh:
-        return yaml.safe_load(fh)
+
+    pattern = re.compile(r"filament_nodes_beta(-?\d+\.\d+)_seed(\d+)\.csv$")
+    cases = []
+
+    for path in sorted(detail_dir.glob("filament_nodes_beta*_seed*.csv")):
+        m = pattern.match(path.name)
+        if not m:
+            continue
+
+        beta = float(m.group(1))
+        seed = int(m.group(2))
+        edges = detail_dir / f"filament_edges_beta{beta:.2f}_seed{seed}.csv"
+
+        if edges.exists():
+            cases.append((beta, seed))
+
+    if not cases:
+        raise FileNotFoundError(
+            f"No valid substantial oscillation cases found in {detail_dir}.\n"
+            "Expected files like:\n"
+            "  filament_nodes_beta0.20_seed1.csv\n"
+            "  filament_edges_beta0.20_seed1.csv"
+        )
+
+    return cases
 
 
 def pair_modes(evals: np.ndarray, zero_tol: float = 1e-8, max_pairs: int = 12):
@@ -191,23 +184,15 @@ def recurrence_quality(values: np.ndarray) -> float:
 # ------------------------------------------------------------
 
 def main():
-    cfg = load_config(REPO_ROOT)
+    cases = discover_cases(DATA_DIR)
 
-    betas = list(cfg["betas"])
-    seeds = list(cfg["seeds"])
+    case_index = max(0, min(args.case_index, len(cases) - 1))
+    beta, seed = cases[case_index]
 
-    beta_index = max(0, min(args.beta_index, len(betas) - 1))
-    seed_index = max(0, min(args.seed_index, len(seeds) - 1))
-
-    beta = betas[beta_index]
-    seed = seeds[seed_index]
-
-    detail_dir = REPO_ROOT / cfg["paths"]["filament_graph_dir"]
-
-    nodes, edges = load_nodes_edges(detail_dir, beta, seed)
+    nodes, edges = load_nodes_edges(DATA_DIR, beta, seed)
     if nodes is None or edges is None:
         raise FileNotFoundError(
-            f"Missing input for beta={beta:.2f}, seed={seed} in {detail_dir}"
+            f"Missing input for beta={beta:.2f}, seed={seed} in {DATA_DIR}"
         )
 
     incidence, edge_list, node_ids = build_incidence(nodes, edges)
@@ -252,6 +237,7 @@ def main():
     )
     ts.to_csv(OUT / "substantial_oscillation_timeseries.csv", index=False)
 
+    # Figure 1
     fig, axes = plt.subplots(1, 2, figsize=(11, 4.5))
 
     axes[0].plot(times, autocorr)
@@ -270,6 +256,7 @@ def main():
     plt.savefig(fig1, dpi=220)
     plt.close(fig)
 
+    # Figure 2
     fig, axes = plt.subplots(1, 2, figsize=(11, 4.5))
 
     axes[0].plot(times, overlap_re, label="Re")
@@ -292,6 +279,7 @@ def main():
     print(f"[OK] wrote {fig1}")
     print(f"[OK] wrote {fig2}")
     print("\n=== SUBSTANTIAL OSCILLATION REPORT ===")
+    print(f"case_index={case_index}")
     print(f"beta={beta}")
     print(f"seed={seed}")
     print(f"pair_index={pair_index}")
