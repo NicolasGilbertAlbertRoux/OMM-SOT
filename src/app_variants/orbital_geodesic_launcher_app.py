@@ -79,12 +79,37 @@ theta = np.deg2rad(args.magnetic_angle_deg)
 mag_dir = np.array([np.cos(theta), np.sin(theta)])
 
 def magnetic_acceleration(pos, vel):
-    if args.magnetic_strength == 0:
+    """
+    Small bounded anisotropic correction.
+    It does NOT inject unlimited linear momentum.
+    It stays local to the body and decays with distance.
+    """
+    if args.magnetic_strength <= 0:
         return np.zeros(2)
 
-    # projection anisotrope
-    proj = np.dot(vel, mag_dir)
-    return args.magnetic_strength * proj * mag_dir
+    d = pos - CENTER
+    rr = np.sqrt(np.sum(d**2) + args.softening**2)
+
+    # local envelope: strong near the body, weak far away
+    envelope = np.exp(-(rr**2) / (2.0 * (1.8 * args.field_sigma)**2))
+
+    # transverse direction relative to magnetic axis
+    # (rotated magnetic direction)
+    mag_perp = np.array([-mag_dir[1], mag_dir[0]])
+
+    # bounded coupling to velocity
+    vnorm = np.linalg.norm(vel)
+    if vnorm < 1e-12:
+        return np.zeros(2)
+
+    # signed transverse modulation, but bounded
+    proj = np.dot(vel / vnorm, mag_dir)
+    amp = args.magnetic_strength * envelope * proj
+
+    # hard cap to avoid runaway
+    amp = np.clip(amp, -0.25, 0.25)
+
+    return amp * mag_perp
 
 # ============================================================
 # INITIAL CONDITIONS
@@ -117,6 +142,8 @@ for _ in range(args.n_steps):
         + field_acceleration(pos)
         + magnetic_acceleration(pos, vel)
     )
+
+    acc = np.clip(acc, -50.0, 50.0)
 
     vel += args.dt * acc
     pos += args.dt * vel
@@ -172,121 +199,4 @@ plt.close()
 print(f"final_radius={radii[-1]}")
 print(f"mean_radius={np.mean(radii)}")
 print(f"max_speed={np.max(speeds)}")
-print(f"mean_speed={np.mean(speeds)}")# ============================================================
-# GRID
-# ============================================================
-
-N = args.size
-CENTER = np.array([N / 2, N / 2])
-
-def laplacian(phi):
-    return (
-        np.roll(phi, 1, 0)
-        + np.roll(phi, -1, 0)
-        + np.roll(phi, 1, 1)
-        + np.roll(phi, -1, 1)
-        - 4 * phi
-    )
-
-def gradient(arr):
-    gy, gx = np.gradient(arr)
-    return gx, gy
-
-def gaussian(pos, sigma):
-    y, x = np.indices((N, N))
-    r2 = (x - pos[0])**2 + (y - pos[1])**2
-    return np.exp(-r2 / (2 * sigma**2))
-
-def solve_poisson(source, iters=60, mass=0.0):
-    pot = np.zeros_like(source)
-    for _ in range(iters):
-        pot = (
-            np.roll(pot, 1, 0)
-            + np.roll(pot, -1, 0)
-            + np.roll(pot, 1, 1)
-            + np.roll(pot, -1, 1)
-            - source
-        ) / (4 + mass**2)
-    return pot
-
-# ============================================================
-# FIELD
-# ============================================================
-
-phi = np.zeros((N, N))
-pi = np.zeros_like(phi)
-
-src = gaussian(CENTER, args.source_sigma)
-
-psi_global_mem = np.zeros_like(phi)
-
-# ============================================================
-# TRAJECTORY
-# ============================================================
-
-pos = np.array([args.x0, args.y0], dtype=float)
-vel = np.array([args.vx0, args.vy0], dtype=float)
-
-traj = []
-
-# ============================================================
-# LOOP
-# ============================================================
-
-for step in range(args.n_steps):
-
-    # field evolve
-    pi += args.dt * (0.75**2 * laplacian(phi) + src - 0.001 * pi)
-    phi += args.dt * pi
-
-    gx, gy = gradient(phi)
-    rho = 0.5 * (gx**2 + gy**2) + 0.5 * (pi**2)
-
-    # geometry
-    psi_local = solve_poisson(rho, mass=0.08)
-
-    rho_g = gaussian_filter(rho, sigma=args.global_sigma)
-    psi_g = solve_poisson(rho_g, mass=args.global_mass)
-
-    psi_global_mem = (
-        (1 - args.global_eta) * psi_global_mem
-        + args.global_eta * psi_g
-    )
-
-    psi_total = psi_local + args.epsilon_global * psi_global_mem
-
-    # force
-    fx, fy = gradient(psi_total)
-
-    ix = int(np.clip(pos[0], 0, N - 1))
-    iy = int(np.clip(pos[1], 0, N - 1))
-
-    acc = -np.array([fx[iy, ix], fy[iy, ix]])
-
-    # integrate
-    vel += args.dt * acc
-    pos += args.dt * vel
-
-    traj.append(pos.copy())
-
-traj = np.array(traj)
-
-# ============================================================
-# OUTPUT
-# ============================================================
-
-plt.figure(figsize=(6,6))
-plt.imshow(psi_total, cmap="coolwarm")
-plt.plot(traj[:,0], traj[:,1], 'k-')
-plt.scatter([CENTER[0]], [CENTER[1]], c='white')
-plt.title("Emergent geometry + trajectory")
-plt.xticks([])
-plt.yticks([])
-
-path = OUT / "app_orbital_launcher.png"
-plt.savefig(path, dpi=200)
-plt.close()
-
-print(f"final_x={pos[0]:.4f}")
-print(f"final_y={pos[1]:.4f}")
-print(f"final_speed={np.linalg.norm(vel):.4f}")
+print(f"mean_speed={np.mean(speeds)}")
