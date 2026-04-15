@@ -15,7 +15,7 @@ Git repository:
 
 This repository accompanies the following research note:
 
-- **Extended research notes**: `notes/OMM-SBT-Extended-Notes.pdf`
+- **Extended research notes**: `notes/OMM_SBT_Extended_Notes.pdf`
 
 These extended notes document the broader research progression, additional numerical and conceptual investigations, and exploratory interpretations that are not all part of the main evidential pipeline of the paper.
 
